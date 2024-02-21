@@ -124,8 +124,27 @@ app.post('/register', async (req, res) => {
     }
 });
 
-app.get('/cart', (req, res) => {
-    res.send('Hello, world!'); 
+app.get('/cart', async (req, res) => {
+
+    try{
+        const userId = req.session.user_id;
+        const cartItems = await postgres
+        .select('*')
+        .from('cart_items')
+        .where('user_id', userId);
+
+        if (cartItems.lenght > 0) {
+            res.json(cartItems);
+        } else {
+            res.status(404).json({ error: 'Cart is empty' });
+        }
+    }
+
+    
+    catch (error) {
+        console.error('Error retrieving cart items:', error);
+        res.status(500).json({ error: 'Error retrieving cart items' });
+    }
 });
 
 app.delete('/removeFromCart', (req, res) => {
@@ -140,12 +159,39 @@ app.get('/orders', (req, res) => {
     res.send('Hello, world!'); 
 });
 
-app.get('/items', (req, res) => {
-    res.send('Hello, world!'); 
+app.get('/items', async  (req, res) => {
+    try{
+        const items = await postgres
+        .select('*')
+        .from('items');
+        res.json(items);
+    }
+    catch (error) {
+        console.error('Error retrieving cart items:', error);
+        res.status(500).json({ error: 'Error retrieving cart items' });
+    }
 });
 
-app.post('/addItem', (req, res) => {
-    res.send('Hello, world!'); 
+app.post('/addItem', upload.single('image'), async (req, res) => {
+    try{
+        const { name, price, description } = req.body;
+        const imagePath = req.file.path;
+        const newItem = await postgres
+        .insert({
+            name: name,
+            price: price,
+            description: description,
+            image: imagePath
+        })
+        .into('items')
+        .returning('*');
+        
+        res.json(newItem[0]);
+    }
+    catch (error) {
+        console.error('Error retrieving cart items:', error);
+        res.status(500).json({ error: 'Error retrieving cart items' });
+    }
 });
 
 app.delete('/deleteItem', (req, res) => {
