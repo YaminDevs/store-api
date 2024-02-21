@@ -167,8 +167,8 @@ app.get('/items', async  (req, res) => {
         res.json(items);
     }
     catch (error) {
-        console.error('Error retrieving cart items:', error);
-        res.status(500).json({ error: 'Error retrieving cart items' });
+        console.error('Error retrieving items:', error);
+        res.status(500).json({ error: 'Error retrieving items' });
     }
 });
 
@@ -189,13 +189,36 @@ app.post('/addItem', upload.single('image'), async (req, res) => {
         res.json(newItem[0]);
     }
     catch (error) {
-        console.error('Error retrieving cart items:', error);
-        res.status(500).json({ error: 'Error retrieving cart items' });
+        console.error('Error adding the item:', error);
+        res.status(500).json({ error: 'Error adding the item' });
     }
 });
 
-app.delete('/deleteItem', (req, res) => {
-    res.send('Hello, world!'); 
+app.delete('/deleteItem', async (req, res) => {
+    const { item_id } = req.body;
+
+    if (!item_id) {
+        return res.status(400).json({ error: 'Item ID is required' });
+    }
+
+    try{
+        const deleteItem = await postgres
+        .delete()
+        .from('items')
+        .where('item_id', item_id)
+        .returning('*');
+
+        if (deletedItem.length === 0) {
+            // If no item was deleted, return an error
+            return res.status(404).json({ error: 'Item not found' });
+        }
+        
+        res.json(deleteItem);
+    }
+    catch (error) {
+        console.error('The item was not deleted:', error);
+        res.status(500).json({ error: 'the item was not deleted' });
+    }
 });
 
 app.post('/admin', (req, res) => {
