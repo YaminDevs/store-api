@@ -192,8 +192,27 @@ app.post('/addToCart', async (req, res) => {
     }
 });
 
-app.get('/orders', (req, res) => {
-    res.send('Hello, world!'); 
+app.post('/orders', async (req, res) => {
+    const orders = await postgres.transaction(async (trx) => {
+        const order = await trx('orders')
+        .insert ({
+            user_id: req.session.user_id,
+            total: req.body.total,
+            status: req.body.status
+        })
+        res.json(order[0]);
+
+        const orderItems = await trx ('order_items')
+        .insert ({
+            order_id: order[0].order_id,
+            item_id: req.body.item_id,
+            quantity: req.body.quantity
+        })
+
+        res.json(orderItems[0]);
+    }); 
+
+    return res.json(orders)
 });
 
 app.get('/items', async  (req, res) => {
