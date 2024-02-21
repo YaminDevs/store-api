@@ -147,7 +147,7 @@ app.get('/cart', async (req, res) => {
     }
 });
 
-app.delete('/removeFromCart', async (req, res) => {
+app.delete('/removeFromCart', async(req, res) => {
     try{
         const { itemId } = req.body;
         const deleteItem = await postgres
@@ -204,17 +204,36 @@ app.post('/addItem', upload.single('image'), async (req, res) => {
     try{
         const { name, price, description } = req.body;
         const imagePath = req.file.path;
-        const newItem = await postgres
-        .insert({
-            name: name,
-            price: price,
-            description: description,
-            image: imagePath
+        const newItem = await postgres.transaction(async (trx) => {
+            const [newItem] = await trx
+            .insert({
+                name: name,
+                price: price,
+                description: description,
+                image: imagePath
+            })
+            .into('items')
+            .returning('*');
+            return res.json(newItem[0]);
         })
-        .into('items')
+
+        const itemCategory = await trx('item_categories')
+        .insert({
+            item_id: newItem.item_id,
+            category_id: req.body.category
+        })
         .returning('*');
-        
-        res.json(newItem[0]);
+        return res.json(itemCategory[0]);
+
+        const itemSizes = await trx('item_sizes')
+        .insert({
+            item_id: newItem.item_id,
+            size_id: req.body.size,
+            quantity: req.body.quantity
+        })
+        .returning('*');
+        return res.json(itemSizes[0]);
+       
     }
     catch (error) {
         console.error('Error adding the item:', error);
