@@ -147,12 +147,40 @@ app.get('/cart', async (req, res) => {
     }
 });
 
-app.delete('/removeFromCart', (req, res) => {
-    res.send('Hello, world!'); 
+app.delete('/removeFromCart', async (req, res) => {
+    try{
+        const { itemId } = req.body;
+        const deleteItem = await postgres
+        .delete()
+        .from('cart_items')
+        .where('item_id', itemId)
+        .returning('*');
+        res.json(deleteItem[0]);
+    } 
+    catch{
+        console.error('Error removing item from cart:', error);
+        res.status(500).json({ error: 'Error removing item from cart' });
+    }
 });
 
-app.post('/addToCart', (req, res) => {
-    res.send('Hello, world!'); 
+app.post('/addToCart', async (req, res) => {
+    try{
+        const userId = req.session.user_id;
+        const { itemId, quantity } = req.body;
+        const cartItem = await postgres
+        .insert({
+            user_id: userId,
+            item_id: itemId,
+            quantity: quantity
+        })
+        .into('cart_items')
+        .returning('*');
+        res.json(cartItem[0]);
+    } 
+    catch (error) {
+        console.error('Error adding item to cart:', error);
+        res.status(500).json({ error: 'Error adding item to cart' });
+    }
 });
 
 app.get('/orders', (req, res) => {
@@ -212,7 +240,7 @@ app.delete('/deleteItem', async (req, res) => {
             // If no item was deleted, return an error
             return res.status(404).json({ error: 'Item not found' });
         }
-        
+
         res.json(deleteItem);
     }
     catch (error) {
