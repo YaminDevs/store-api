@@ -67,6 +67,15 @@ app.post('/register', async (req, res) => {
           .returning('*');
   
         res.json(user[0]);
+
+        const cart = await trx('cart')
+        .insert({
+          user_id: user[0].user_id
+        })
+        .into('cart')
+        .returning('*');
+
+        res.json(cart[0]);
       });
     } catch (error) {
       console.error('Error registering user:', error);
