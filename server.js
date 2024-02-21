@@ -205,35 +205,40 @@ app.post('/addItem', upload.single('image'), async (req, res) => {
         const { name, price, description } = req.body;
         const imagePath = req.file.path;
         const newItem = await postgres.transaction(async (trx) => {
-            const [newItem] = await trx
-            .insert({
-                name: name,
-                price: price,
-                description: description,
-                image: imagePath
-            })
-            .into('items')
-            .returning('*');
-            return res.json(newItem[0]);
-        })
+            // Insert the item into the items table
+            const [insertedItem] = await trx
+                .insert({
+                    name: name,
+                    price: price,
+                    description: description,
+                    image: imagePath
+                })
+                .into('items')
+                .returning('*');
 
-        const itemCategory = await trx('item_categories')
-        .insert({
-            item_id: newItem.item_id,
-            category_id: req.body.category
-        })
-        .returning('*');
-        return res.json(itemCategory[0]);
+            // Insert the item category into the item_categories table
+            const itemCategory = await trx('item_categories')
+                .insert({
+                    item_id: insertedItem.item_id,
+                    category_id: category
+                })
+                .returning('*');
 
-        const itemSizes = await trx('item_sizes')
-        .insert({
-            item_id: newItem.item_id,
-            size_id: req.body.size,
-            quantity: req.body.quantity
-        })
-        .returning('*');
-        return res.json(itemSizes[0]);
-       
+            // Insert the item size into the item_sizes table
+            const itemSize = await trx('item_sizes')
+                .insert({
+                    item_id: insertedItem.item_id,
+                    size_id: size,
+                    quantity: quantity
+                })
+                .returning('*');
+
+            // Return the newly created item along with its category and size
+            return { newItem: insertedItem, itemCategory: itemCategory[0], itemSize: itemSize[0] };
+        });
+
+        // Send the response
+        res.json(newItem);
     }
     catch (error) {
         console.error('Error adding the item:', error);
@@ -248,23 +253,38 @@ app.delete('/deleteItem', async (req, res) => {
         return res.status(400).json({ error: 'Item ID is required' });
     }
 
-    try{
-        const deleteItem = await postgres
-        .delete()
-        .from('items')
-        .where('item_id', item_id)
-        .returning('*');
+    try {
+        const deletedItem = await postgres.transaction(async (trx) => {
+            // Delete item from the items table
+            const deletedItems = await trx
+                .delete()
+                .from('items')
+                .where('item_id', item_id)
+                .returning('*');
+
+            // Delete related categories from the item_categories table
+            await trx
+                .delete()
+                .from('item_categories')
+                .where('item_id', item_id);
+
+            // Delete related sizes from the item_sizes table
+            await trx
+                .delete()
+                .from('item_sizes')
+                .where('item_id', item_id);
+
+            return deletedItems;
+        });
 
         if (deletedItem.length === 0) {
-            // If no item was deleted, return an error
             return res.status(404).json({ error: 'Item not found' });
         }
 
-        res.json(deleteItem);
-    }
-    catch (error) {
+        res.json(deletedItem);
+    } catch (error) {
         console.error('The item was not deleted:', error);
-        res.status(500).json({ error: 'the item was not deleted' });
+        res.status(500).json({ error: 'The item was not deleted' });
     }
 });
 
