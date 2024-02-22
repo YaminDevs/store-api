@@ -46,37 +46,36 @@ app.post('/register', async (req, res) => {
   
       const salt = await bcrypt.genSalt(saltRounds);
       const hash = await bcrypt.hash(password, salt);
-  
-      await postgres.transaction(async (trx) => {
-        await trx
-          .insert({
-            hash: hash,
-            email: email
-          })
-          .into('login')
-          .returning('email');
-  
-        const user = await trx('users')
-          .insert({
-            email: email,
-            name: name,
-            password: hash,
-            joined: new Date()
-          })
-          .into('users')
-          .returning('*');
-  
-        res.json(user[0]);
-
-        const cart = await trx('cart')
+        await postgres.transaction(async (trx) => {
+            const newUser = await postgres
         .insert({
-          user_id: user[0].user_id
+          email: email,
+          name: name,
+          password: password,
+          joined: new Date()
         })
-        .into('cart')
+        .into('users')
+        .returning('user_id', 'email', 'name', 'joined');
+
+        await trx('cart')
+        .insert({
+            user_id: newUser[0].user_id
+        })
+        .into('carts')
         .returning('*');
 
-        res.json(cart[0]);
-      });
+        await trx('login')
+        .insert({
+            email: email,
+            hash: hash
+        })
+        .into('login')
+        .returning('*');
+
+        res.json(newUser[0]);
+        })
+      
+
     } catch (error) {
       console.error('Error registering user:', error);
       res.status(400).json('Error registering user');
@@ -200,7 +199,7 @@ app.post('/orders', async (req, res) => {
             total: req.body.total,
             status: req.body.status
         })
-        res.json(order[0]);
+        .returning('*');
 
         const orderItems = await trx ('order_items')
         .insert ({
@@ -209,10 +208,10 @@ app.post('/orders', async (req, res) => {
             quantity: req.body.quantity
         })
 
-        res.json(orderItems[0]);
+        returning('*');
     }); 
 
-    return res.json(orders)
+    res.json(orders[0]);
 });
 
 app.get('/items', async  (req, res) => {
