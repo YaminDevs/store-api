@@ -116,7 +116,7 @@ app.post('/register', async (req, res) => {
     try {
         const { id } = req.params;
         const user = await postgres
-            .select('*')
+            .select('user_id', 'email', 'name', 'joined')
             .from('users')
             .where('user_id', id)
             .first();
@@ -157,11 +157,11 @@ app.get('/cart', async (req, res) => {
 
 app.delete('/removeFromCart', async(req, res) => {
     try{
-        const { itemId } = req.body;
+        const { cart_item_id } = req.body;
         const deleteItem = await postgres
         .delete()
         .from('cart_items')
-        .where('item_id', itemId)
+        .where('cart_item_id', cart_item_id)
         .returning('*');
         res.json(deleteItem[0]);
     } 
@@ -173,12 +173,12 @@ app.delete('/removeFromCart', async(req, res) => {
 
 app.post('/addToCart', async (req, res) => {
     try{
-        const userId = req.session.user_id;
-        const { itemId, quantity } = req.body;
+        const { item_id, quantity, size_id, cart_id } = req.body;
         const cartItem = await postgres
         .insert({
-            user_id: userId,
-            item_id: itemId,
+            cart_id: cart_id,
+            item_id: item_id,
+            size_id: size_id,
             quantity: quantity
         })
         .into('cart_items')
@@ -192,26 +192,40 @@ app.post('/addToCart', async (req, res) => {
 });
 
 app.post('/orders', async (req, res) => {
-    const orders = await postgres.transaction(async (trx) => {
-        const order = await trx('orders')
-        .insert ({
-            user_id: req.session.user_id,
-            total: req.body.total,
-            status: req.body.status
-        })
-        .returning('*');
-
-        const orderItems = await trx ('order_items')
-        .insert ({
-            order_id: order[0].order_id,
-            item_id: req.body.item_id,
-            quantity: req.body.quantity
-        })
-
-        returning('*');
-    }); 
-
-    res.json(orders[0]);
+    try{
+        const orders = await postgres.transaction(async (trx) => {
+            const order = await trx('orders')
+            .insert ({
+                user_id: req.session.user_id,
+                total: req.body.total,
+                status: req.body.status
+            })
+            .into('orders')
+            .returning('*');
+    
+            const orderedItems = await trx ('order_items')
+            .insert ({
+                order_id: order[0].order_id,
+                item_id: req.body.item_id,
+                size_id: req.body.size_id,
+                quantity: req.body.quantity
+            })
+            .into('order_items')
+            .returning('*');
+    
+            const newQuantity = await trx('items_sizes')
+            .where({ item_id: item_id, size_id: size_id })
+            .decrement('quantity', quantity);
+        }); 
+    
+        await postgres.commit();
+    
+        res.json(orders[0]);
+    }
+    catch (error) {
+        console.error('Error creating order:', error);
+        res.status(500).json({ error: 'Error creating order' });
+    }
 });
 
 app.get('/items', async (req, res) => {
@@ -243,49 +257,24 @@ app.get('/items', async (req, res) => {
 });
 
 app.post('/addItem', upload.single('image'), async (req, res) => {
-    try{
-        const { name, price, description } = req.body;
-        const imagePath = req.file.path;
-        const newItem = await postgres.transaction(async (trx) => {
-            // Insert the item into the items table
-            const [insertedItem] = await trx
-                .insert({
-                    name: name,
-                    price: price,
-                    description: description,
-                    image: imagePath
-                })
-                .into('items')
-                .returning('*');
-
-            // Insert the item category into the item_categories table
-            const itemCategory = await trx('item_categories')
-                .insert({
-                    item_id: insertedItem.item_id,
-                    category_id: category
-                })
-                .returning('*');
-
-            // Insert the item size into the item_sizes table
-            const itemSize = await trx('item_sizes')
-                .insert({
-                    item_id: insertedItem.item_id,
-                    size_id: size,
-                    quantity: quantity
-                })
-                .returning('*');
-
-            // Return the newly created item along with its category and size
-            return { newItem: insertedItem, itemCategory: itemCategory[0], itemSize: itemSize[0] };
-        });
-
-        // Send the response
-        res.json(newItem);
-    }
-    catch (error) {
-        console.error('Error adding the item:', error);
-        res.status(500).json({ error: 'Error adding the item' });
-    }
+   try{
+    const { name, price, description} = req.body;
+    const image = req.file.path;
+    const item = await postgres
+    .insert({
+        name: name,
+        price: price,
+        description: description,
+        image: image
+    })
+    .into('items')
+    .returning('*');
+    res.json(item[0]);
+   }
+   catch (error) {
+    console.error('Error adding the item:', error);
+    res.status(500).json({ error: 'Error adding the item' });
+   }
 });
 
 app.delete('/deleteItem', async (req, res) => {
@@ -329,6 +318,46 @@ app.delete('/deleteItem', async (req, res) => {
         res.status(500).json({ error: 'The item was not deleted' });
     }
 });
+
+app.post('/addCategory', async (req, res) => {
+    try{
+        const { item_id, category_id } = req.body;
+        const itemCategory = await postgres
+                .insert({
+                    item_id: item_id,
+                    category_id: category_id
+                })
+                .into('item_categories')
+                .returning('*');
+                
+                res.json(itemCategory[0]);
+    }
+    catch (error) {
+        console.error('Error adding the categories:', error);
+        res.status(500).json({ error: 'Error adding the categories' });
+    }
+});
+
+app.post('/addSize', async (req, res) => {
+    try{
+        const { item_id, size_id, quantity } = req.body;
+        const itemSize = await postgres
+                .insert({
+                    item_id: item_id,
+                    size_id: size_id,
+                    quantity: quantity
+                })
+                .into('item_sizes')
+                .returning('*');
+                
+                res.json(itemSize[0]);
+    }
+    catch (error) {
+        console.error('Error adding the size:', error);
+        res.status(500).json({ error: 'Error adding the size' });
+    }
+});
+
 
 app.post('/admin', (req, res) => {
     res.send('Hello, world!'); 
