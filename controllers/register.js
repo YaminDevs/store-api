@@ -1,6 +1,6 @@
 const handleRegister = async (req, res, postgres, bcrypt) => {
     try {
-      const { email, name, password } = req.body;
+      const { email, name, password, role } = req.body;
       const saltRounds = 10;
   
       const salt = await bcrypt.genSalt(saltRounds);
@@ -11,6 +11,7 @@ const handleRegister = async (req, res, postgres, bcrypt) => {
           email: email,
           name: name,
           password: hash,
+          role: role,
           joined: new Date()
         })
         .into('users')
