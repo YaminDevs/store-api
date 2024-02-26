@@ -191,6 +191,23 @@ app.post('/addToCart', async (req, res) => {
     }
 });
 
+app.put('/changeQuantity', async (req, res) => {
+    try{
+        const { cart_item_id, quantity } = req.body;
+        const cartItem = await postgres('cart_items')
+        .update({
+            quantity: quantity
+        })
+        .where('cart_item_id', cart_item_id)
+        .returning('*');
+        res.json(cartItem[0]);
+    }
+    catch (error) {
+        console.error('Error checking out:', error);
+        res.status(500).json({ error: 'Error checking out' });
+    }
+})
+
 app.post('/orders', async (req, res) => {
     try{
         const orders = await postgres.transaction(async (trx) => {
@@ -362,8 +379,6 @@ app.post('/addSize', async (req, res) => {
 app.post('/admin', (req, res) => {
     res.send('Hello, world!'); 
 });
-
-
 
 
 // Start the server
